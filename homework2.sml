@@ -1,7 +1,9 @@
 
 (*
- * Code for HOMEWORK 2
- *
+ Jazmin Gonzalez-Rivero
+ Jazmin.Gonzalez-Rivero@students.olin.edu
+ Luke and Chris helped me with problem 2 of this homework. I was having trouble visualizing exactly what each variable represented.
+ 
  *)
 
 
@@ -73,11 +75,13 @@ fun applySub v1 v2 = applyAdd v1 (applyNeg v2)
 
 (* COMPLETE THE FOLLOWING FOR QUESTION 1 *)
 
-fun applyPair _ _ = unimplemented "applyPair"
+fun applyPair v1 v2 = VPair (v1, v2)
 
-fun applyFirst _ = unimplemented "applyFirst"
+fun applyFirst (VPair(a, b)) = a
+  | applyFirst _ = evalError "applyFIrst"
 
-fun applySecond _ = unimplemented "applySecond"
+fun applySecond (VPair(a, b)) = b
+  | applySecond _ = unimplemented "applySecond"
 
 
 
@@ -119,10 +123,15 @@ fun subst (EVal v) id e = EVal v
   | subst (EIsEmpty e1) id e = unimplemented "subst/EIsEmpty"
   | subst (EHead e1) id e = unimplemented "subst/EHead"
   | subst (ETail e1) id e = unimplemented "subst/ETail"
-  | subst (EPair (e1,e2)) id e = unimplemented "subst/EPair"
-  | subst (EFirst e1) id e = unimplemented "subst/EFirst"
-  | subst (ESecond e1) id e = unimplemented "subst/ESecond"
-  | subst (ESlet (bnds,e1)) id e = unimplemented "subst/ESlet"
+  | subst (EPair (e1,e2)) id e = EPair (subst e1 id e, subst e2 id e)
+  | subst (EFirst e1) id e = EFirst (subst e1 id e)
+  | subst (ESecond e1) id e = ESecond (subst e1 id e)
+  | subst (ESlet (bnds,e1)) id e = ESlet (
+    (List.foldr(fn ((startID,startE),rest) => (startID,subst startE id e)::rest)  [] bnds),
+    if List.length (List.filter(fn (startID, startEX) => id = startID) bnds) = 0
+    then subst e1 id e
+    else e1)
+
   | subst (ECallE (e1,e2)) id e = unimplemented "subst/ECallE"
 
 
@@ -151,14 +160,14 @@ fun eval _ (EVal v) = v
   | eval fenv (EIdent id) = unimplemented "eval/EIdent"
   | eval fenv (ECall (name,e)) = 
                 evalCall fenv (lookup name fenv) (eval fenv e)
-  | eval fenv (ESlet (bnds,f)) = unimplemented "eval/ESlet"
+  | eval fenv (ESlet (bnds,f)) = evalSLet fenv bnds f
   | eval fenv (ECons (e1,e2)) = unimplemented "eval/ECons"
   | eval fenv (EIsEmpty e) = unimplemented "eval/EIsEmpty"
   | eval fenv (EHead e) = unimplemented "eval/EHead"
   | eval fenv (ETail e) = unimplemented "eval/ETail"
-  | eval fenv (EPair (e1,e2)) = unimplemented "eval/EPair"
-  | eval fenv (EFirst e) = unimplemented "eval/EFirst"
-  | eval fenv (ESecond e) = unimplemented "eval/ESecond"
+  | eval fenv (EPair (e1,e2)) = applyPair (eval fenv e1) (eval fenv e2)
+  | eval fenv (EFirst e) = applyFirst (eval fenv e)
+  | eval fenv (ESecond e) = applySecond (eval fenv e)
   | eval fenv (ECallE (func, e)) = unimplemented "eval/ECallE"
 
 and evalCall fenv (FDef (param,body)) arg = 
@@ -170,7 +179,8 @@ and evalIf fenv (VBool true) ethen eelse = eval fenv ethen
 
 and evalLet fenv id v body = eval fenv (subst body id (EVal v))
 
-
+and evalSLet fenv ((bId, bEx)::bnds) expre = eval fenv (ESlet(bnds,(subst expre bId bEx)))
+  |evalSLet fenv [] expre = eval fenv expre
 
 (* Sample functions for testing *)
 
