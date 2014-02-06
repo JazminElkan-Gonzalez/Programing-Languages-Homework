@@ -75,7 +75,7 @@ fun applySub v1 v2 = applyAdd v1 (applyNeg v2)
 
 (* COMPLETE THE FOLLOWING FOR QUESTION 1 *)
 
-fun applyPair v1 v2 = VPair (v1, v2)
+fun applyPair v1 (v2) = VPair (v1, v2)
 
 fun applyFirst (VPair(a, b)) = a
   | applyFirst _ = evalError "applyFIrst"
@@ -87,13 +87,20 @@ fun applySecond (VPair(a, b)) = b
 
 (* COMPLETE THE FOLLOWING FOR QUESTION 3 *)
 
-fun applyCons _ _ = unimplemented "applyCons"
+fun applyCons v1 (VList v2) = VList (v1::v2)
+  | applyCons v1 _ = raise Fail "applyCons"
 
-fun applyIsEmpty _ = unimplemented "applyIsEmpty"
 
-fun applyHead _ = unimplemented "applyHead"
+fun applyIsEmpty (VList []) = (VBool true)
+  | applyIsEmpty v = (VBool false) 
 
-fun applyTail _ = unimplemented "applyTail"
+fun applyHead (VList []) = raise Fail "applyHead"
+  | applyHead (VList (head::tail)) = head
+  | applyHead _ = raise Fail "applyHead"
+
+fun applyTail (VList []) = raise Fail "applyTail"
+  | applyTail (VList (head::tail)) = VList tail
+  | applyTail _ = raise Fail "applyTail"
 
 
 
@@ -119,10 +126,10 @@ fun subst (EVal v) id e = EVal v
                                 then e
                               else EIdent id'
   | subst (ECall (n,e1)) id e = ECall (n,subst e1 id e)
-  | subst (ECons (e1,e2)) id e = unimplemented "subst/ECons"
-  | subst (EIsEmpty e1) id e = unimplemented "subst/EIsEmpty"
-  | subst (EHead e1) id e = unimplemented "subst/EHead"
-  | subst (ETail e1) id e = unimplemented "subst/ETail"
+  | subst (ECons (e1,e2)) id e = ECons (subst e1 id e, subst e2 id e)
+  | subst (EIsEmpty e1) id e = EIsEmpty (subst e1 id e)
+  | subst (EHead e1) id e = EHead (subst e1 id e)
+  | subst (ETail e1) id e = ETail (subst e1 id e)
   | subst (EPair (e1,e2)) id e = EPair (subst e1 id e, subst e2 id e)
   | subst (EFirst e1) id e = EFirst (subst e1 id e)
   | subst (ESecond e1) id e = ESecond (subst e1 id e)
@@ -161,10 +168,10 @@ fun eval _ (EVal v) = v
   | eval fenv (ECall (name,e)) = 
                 evalCall fenv (lookup name fenv) (eval fenv e)
   | eval fenv (ESlet (bnds,f)) = evalSLet fenv bnds f
-  | eval fenv (ECons (e1,e2)) = unimplemented "eval/ECons"
-  | eval fenv (EIsEmpty e) = unimplemented "eval/EIsEmpty"
-  | eval fenv (EHead e) = unimplemented "eval/EHead"
-  | eval fenv (ETail e) = unimplemented "eval/ETail"
+  | eval fenv (ECons (e1,e2)) = applyCons (eval fenv e1) (eval fenv e2)
+  | eval fenv (EIsEmpty e) = applyIsEmpty (eval fenv e)
+  | eval fenv (EHead e) = applyHead (eval fenv e)
+  | eval fenv (ETail e) = applyTail (eval fenv e)
   | eval fenv (EPair (e1,e2)) = applyPair (eval fenv e1) (eval fenv e2)
   | eval fenv (EFirst e) = applyFirst (eval fenv e)
   | eval fenv (ESecond e) = applySecond (eval fenv e)
