@@ -3,7 +3,7 @@
  Jazmin Gonzalez-Rivero
  Jazmin.Gonzalez-Rivero@students.olin.edu
  Luke and Chris helped me with problem 2 of this homework. I was having trouble visualizing exactly what each variable represented.
- 
+ I liked this homework. It made me understand what we went over in class. 
  *)
 
 
@@ -139,8 +139,7 @@ fun subst (EVal v) id e = EVal v
     then subst e1 id e
     else e1)
 
-  | subst (ECallE (e1,e2)) id e = unimplemented "subst/ECallE"
-
+  | subst (ECallE (e1,e2)) id e = ECallE (subst e1 id e, subst e2 id e)
 
 
 
@@ -164,7 +163,7 @@ fun eval _ (EVal v) = v
   | eval fenv (EEq (e1,e2)) = applyEq (eval fenv e1) (eval fenv e2)
   | eval fenv (EIf (e1,e2,e3)) = evalIf fenv (eval fenv e1) e2 e3
   | eval fenv (ELet (n,e1,e2)) = evalLet fenv n (eval fenv e1) e2
-  | eval fenv (EIdent id) = unimplemented "eval/EIdent"
+  | eval fenv (EIdent id) = VFun (lookup id fenv)
   | eval fenv (ECall (name,e)) = 
                 evalCall fenv (lookup name fenv) (eval fenv e)
   | eval fenv (ESlet (bnds,f)) = evalSLet fenv bnds f
@@ -175,7 +174,10 @@ fun eval _ (EVal v) = v
   | eval fenv (EPair (e1,e2)) = applyPair (eval fenv e1) (eval fenv e2)
   | eval fenv (EFirst e) = applyFirst (eval fenv e)
   | eval fenv (ESecond e) = applySecond (eval fenv e)
-  | eval fenv (ECallE (func, e)) = unimplemented "eval/ECallE"
+  | eval fenv (ECallE (func, e)) = evalCallE fenv (eval fenv func)(eval fenv e)
+
+and evalCallE fenv (VFun (FDef (param,body))) arg = 
+      eval fenv (subst body param (EVal arg))
 
 and evalCall fenv (FDef (param,body)) arg = 
       eval fenv (subst body param (EVal arg))
