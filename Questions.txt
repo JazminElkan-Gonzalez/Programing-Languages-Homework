@@ -1,0 +1,3 @@
+Questions I have
+
+- what is call-by-value

@@ -1,3 +1,8 @@
+(*
+Jazmin Gonzalez-Rivero
+Jazmin.Gonzalez-Rivero@students.olin.edu
+*)
+
 
 (*************************************************************
  *      Code for HOMEWORK 3
@@ -183,6 +188,7 @@ fun identityMat n =
  *)
 
 
+
 fun applyAdd (VRat r) (VRat s) = VRat (addRat r s)
   | applyAdd (VMat m) (VMat n) = VMat (addMat m n)
   | applyAdd v (VMat m) = VMat (mapMat (applyAdd v) m)
@@ -263,7 +269,8 @@ fun applyEq (VRat r) (VRat s) = VBool (r=s)
   | applyEq _ _ = evalError "applyEq"
 
 
-fun applyEye _ = unimplemented "applyEye"
+fun applyEye (VRat (a,1)) = VMat (identityMat a)
+  | applyEye _ = evalError "applyEye"
 
 
 
@@ -297,7 +304,7 @@ fun subst (EVal v) id e = EVal v
     in
 	EMatrix (mapMat sub m)
     end
-  | subst (EEye f) id e = unimplemented "subst/EEye"
+  | subst (EEye f) id e = EEye (subst f id e)
 
 
 
@@ -323,7 +330,7 @@ fun eval _ (EVal v) = v
   | eval fenv (ECall (name,es)) = 
                 evalCall fenv (lookup name fenv) (map (eval fenv) es)
   | eval fenv (EMatrix m) = matrix (mapMat (eval fenv) m)
-  | eval fenv (EEye (e)) = unimplemented "eval/EEye"
+  | eval fenv (EEye (e)) = applyEye (eval fenv e)
 
 and evalCall fenv (FDef (params,body)) vs = let
     fun substParams e [] [] = e
@@ -427,6 +434,7 @@ fun produceSymbol "let" = SOME (T_LET)
   | produceSymbol "true" = SOME (T_TRUE)
   | produceSymbol "false" = SOME (T_FALSE)
   | produceSymbol "if" = SOME (T_IF)
+  | produceSymbol "eye" = SOME (T_EYE)
   | produceSymbol text = SOME (T_SYM text)
 
 fun produceInt text = SOME (T_INT (valOf (Int.fromString text)))
@@ -531,6 +539,9 @@ fun expect_TRUE (T_TRUE::ts) = SOME ts
 
 fun expect_FALSE (T_FALSE::ts) = SOME ts
   | expect_FALSE _ = NONE
+
+fun expect_EYE (T_EYE::ts) = SOME ts
+  | expect_EYE _ = NONE
 
 fun expect_SYM ((T_SYM s)::ts) = SOME (s,ts)
   | expect_SYM _ = NONE
@@ -743,6 +754,8 @@ and parse_factor ts =
 	   of NONE => 
 	      (case parse_factor_FALSE ts 
 		of NONE => 
+        (case parse_factor_EYE ts
+    of NONE =>
 		   (case parse_factor_CALL ts
 		     of NONE => 
 			(case parse_factor_SYM ts
@@ -751,6 +764,7 @@ and parse_factor ts =
 		      | s => s)
 		 | s => s)
 	    | s => s)
+       | s => s)
        | s => s)
 
 and parse_factor_INT ts = 
@@ -767,6 +781,20 @@ and parse_factor_FALSE ts =
     (case expect_FALSE ts
       of NONE => NONE
        | SOME ts => SOME (EVal (VBool false),ts))
+
+and parse_factor_EYE ts =
+    (case expect_EYE ts
+      of NONE => NONE 
+        | SOME ts =>
+    (case expect_LPAREN ts
+      of NONE => NONE
+        | SOME ts =>
+    (case parse_expr ts
+      of NONE => NONE
+        | SOME (e,ts) => 
+    (case expect_RPAREN ts
+      of NONE => NONE
+        | SOME ts => SOME (EEye (e) ,ts)))))
 
 and parse_factor_CALL ts = 
     (case expect_SYM ts 
