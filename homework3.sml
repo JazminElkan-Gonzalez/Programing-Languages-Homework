@@ -402,10 +402,10 @@ datatype token = T_LET
 	       | T_RPAREN
 	       | T_COMMA
 	       | T_EYE
-               | T_SEMICOLON
-               | T_LBRACKET
-               | T_RBRACKET
-               | T_DEF
+        | T_SEMICOLON
+        | T_LBRACKET
+        | T_RBRACKET
+        | T_DEF
 
 fun stringOfToken T_LET = "T_LET"
   | stringOfToken (T_SYM s) = "T_SYM["^s^"]"
@@ -447,6 +447,10 @@ fun produceLParen _ = SOME (T_LPAREN)
 fun produceRParen _ = SOME (T_RPAREN)
 fun produceSlash _ = SOME (T_SLASH)
 fun produceComma _ = SOME (T_COMMA)
+fun produceLBracket _ = SOME (T_LBRACKET)
+fun produceRBracket _ = SOME (T_RBRACKET)
+fun produceSemiColon _ = SOME (T_SEMICOLON)
+
 
 val tokens = let 
     fun convert (re,f) = (R.compileString re, f)
@@ -461,7 +465,10 @@ in
 		 ("\\(",                  produceLParen),
 		 ("\\)",                  produceRParen),
 		 (",",                    produceComma),
-		 ("/",                    produceSlash)]
+		 ("/",                    produceSlash),
+     ("\\[",                  produceLBracket),
+     ("\\]",                  produceRBracket),
+     (";",                    produceSemiColon)]
 end
 
 
@@ -570,6 +577,12 @@ fun expect_LPAREN (T_LPAREN::ts) = SOME ts
 fun expect_RPAREN (T_RPAREN::ts) = SOME ts
   | expect_RPAREN _ = NONE
 
+fun expect_LBRACKET (T_LBRACKET::ts) = SOME ts
+  | expect_LBRACKET _ = NONE
+
+fun expect_RBRACKET (T_RBRACKET::ts) = SOME ts
+  | expect_RBRACKET _ = NONE
+
 fun expect_PLUS (T_PLUS::ts) = SOME ts
   | expect_PLUS _ = NONE
 
@@ -584,6 +597,9 @@ fun expect_SLASH (T_SLASH::ts) = SOME ts
 
 fun expect_COMMA (T_COMMA::ts) = SOME ts
   | expect_COMMA _ = NONE
+
+fun expect_SEMICOLON (T_SEMICOLON::ts) = SOME ts
+  | expect_SEMICOLON _ = NONE
 
 
 
@@ -623,21 +639,21 @@ and parse_expr_LET ts =
     (case expect_LET ts 
       of NONE => NONE
        | SOME ts => 
-	 (case expect_SYM ts 
-	   of NONE => NONE
-	    | SOME (s,ts) => 
-	      (case expect_EQUAL ts
-		of NONE => NONE
-		 | SOME ts => 
-		   (case parse_expr ts
-		     of NONE => NONE
-		      | SOME (e1,ts) => 
-			(case expect_IN ts
-			  of NONE => NONE
-			   | SOME ts => 
-			     (case parse_expr ts
-			       of NONE => NONE
-				| SOME (e2,ts) => SOME (ELet (s,e1,e2),ts)))))))
+	       (case expect_SYM ts 
+	         of NONE => NONE
+	         | SOME (s,ts) => 
+	           (case expect_EQUAL ts
+		          of NONE => NONE
+		          | SOME ts => 
+		            (case parse_expr ts
+		              of NONE => NONE
+		              | SOME (e1,ts) => 
+			             (case expect_IN ts
+			               of NONE => NONE
+			               | SOME ts => 
+			             (case parse_expr ts
+			               of NONE => NONE
+				            | SOME (e2,ts) => SOME (ELet (s,e1,e2),ts)))))))
 
 
 and parse_expr_EQ ts = 
@@ -653,7 +669,24 @@ and parse_expr_EQ ts =
 
 and parse_expr_ETERM ts = parse_eterm ts
 
+and parse_expr_row ts =
+  (case parse_expr ts
+    of NONE => NONE 
+    | SOME (e,ts) =>
+  (case parse_expr_row ts 
+    of NONE => SOME ([e],ts)
+    | SOME (es, ts) => SOME (e::es, ts)))
 
+and parse_expr_rows ts =
+  (case parse_expr_row ts
+    of NONE => NONE 
+    | SOME (e, ts) =>
+    (case expect_SEMICOLON ts
+      of NONE => SOME ([e],ts)
+      | SOME ts => 
+    (case parse_expr_rows ts
+      of NONE => NONE
+      | SOME (es, ts) => SOME ((e::es),ts))))
 
 and parse_expr_list ts = 
     (case parse_expr_list_COMMA ts
@@ -748,24 +781,27 @@ and parse_term_FACTOR ts = parse_factor ts
 
 
 and parse_factor ts = 
-    (case parse_factor_INT ts
-      of NONE =>
-	 (case parse_factor_TRUE ts 
-	   of NONE => 
-	      (case parse_factor_FALSE ts 
-		of NONE => 
-        (case parse_factor_EYE ts
+  (case parse_factor_INT ts
     of NONE =>
-		   (case parse_factor_CALL ts
-		     of NONE => 
-			(case parse_factor_SYM ts
-			  of NONE => parse_factor_PARENS ts
-			   | s => s)
-		      | s => s)
-		 | s => s)
-	    | s => s)
-       | s => s)
-       | s => s)
+	(case parse_factor_TRUE ts 
+    of NONE => 
+	(case parse_factor_FALSE ts 
+		of NONE => 
+  (case parse_factor_EYE ts
+    of NONE =>
+	(case parse_factor_CALL ts
+		of NONE => 
+  (case parse_factor_MATRIX ts
+    of NONE => 
+	(case parse_factor_SYM ts
+		of NONE => parse_factor_PARENS ts
+		| s => s)
+		| s => s)
+		| s => s)
+    | s => s)
+    | s => s)
+    | s => s)
+    | s => s)
 
 and parse_factor_INT ts = 
     (case expect_INT ts 
@@ -795,6 +831,18 @@ and parse_factor_EYE ts =
     (case expect_RPAREN ts
       of NONE => NONE
         | SOME ts => SOME (EEye (e) ,ts)))))
+
+and parse_factor_MATRIX ts = 
+    (case expect_LBRACKET ts
+      of NONE => NONE
+        | SOME ts =>
+    (case parse_expr_rows ts
+      of NONE => NONE
+        | SOME (e,ts) => 
+    (case expect_RBRACKET ts
+      of NONE => NONE
+        | SOME ts => SOME (EMatrix (e) ,ts))))
+
 
 and parse_factor_CALL ts = 
     (case expect_SYM ts 
