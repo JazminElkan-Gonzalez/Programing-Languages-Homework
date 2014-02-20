@@ -56,6 +56,11 @@ datatype expr = EVal of value
 	      | EMatrix of expr list list
 	      | EEye of expr
 
+
+datatype decl = DeclDefinition of string * (string list) * expr
+              | DeclExpression of expr
+
+
 datatype function = FDef of string list * expr 
 
 
@@ -188,6 +193,12 @@ fun identityMat n =
  *)
 
 
+fun applyGetEntry (VMat m) (VRat (r,1)) (VRat (c,1)) = let 
+  val row  = List.nth(m, r) 
+    in 
+      List.nth(row, c) 
+    end
+  | applyGetEntry _ _ _ = evalError "invalid entry at applyGetEntry"
 
 fun applyAdd (VRat r) (VRat s) = VRat (addRat r s)
   | applyAdd (VMat m) (VMat n) = VMat (addMat m n)
@@ -211,6 +222,7 @@ in
       then add xss yss
     else evalError "adding matrices with incompatible sizes"
 end
+
 
 
 fun applyMul (VRat r) (VRat s) = VRat (mulRat r s)
@@ -431,6 +443,7 @@ fun stringOfToken T_LET = "T_LET"
 fun whitespace _ = NONE
 
 fun produceSymbol "let" = SOME (T_LET)
+  | produceSymbol "def" = SOME (T_DEF)
   | produceSymbol "true" = SOME (T_TRUE)
   | produceSymbol "false" = SOME (T_FALSE)
   | produceSymbol "if" = SOME (T_IF)
@@ -532,6 +545,9 @@ fun lexString str = lex (explode str)
  *              T_SYM T_LPAREN expr_list T_RPAREN    [term_CALL]
  *              T_SYM                                [term_SYM]
  *              T_LPAREN expr TRPAREN                [term_PARENS]
+ *
+ *   decl ::= T_DEF T_SYM T_LPAREN symbol_list T_RPAREN T_EQUAL expr expr
+ *   symbol_list ::= T_SYM T_COMMA symbol_list T_SYM
  * 
  *  (The names on the right are used to refer to the rules
  *   when naming helper parsing functions; they're just indicative)
@@ -543,6 +559,9 @@ fun expect_INT ((T_INT i)::ts) = SOME (i,ts)
 
 fun expect_TRUE (T_TRUE::ts) = SOME ts
   | expect_TRUE _ = NONE
+
+fun expect_DEF (T_DEF::ts) = SOME ts
+  | expect_DEF _ = NONE
 
 fun expect_FALSE (T_FALSE::ts) = SOME ts
   | expect_FALSE _ = NONE
@@ -687,6 +706,7 @@ and parse_expr_rows ts =
     (case parse_expr_rows ts
       of NONE => NONE
       | SOME (es, ts) => SOME ((e::es),ts))))
+
 
 and parse_expr_list ts = 
     (case parse_expr_list_COMMA ts
@@ -874,6 +894,42 @@ and parse_factor_PARENS ts =
 		of NONE => NONE
 		| SOME ts => SOME (e,ts))))
 
+and parse_decl ts =
+  (case expect_DEF ts 
+    of NONE => (case parse_expr ts 
+      of NONE => NONE
+      |SOME (expr, _) => SOME (DeclExpression expr, []))
+    | SOME ts =>
+  (case expect_SYM ts
+    of NONE => NONE
+    | SOME (action,ts) =>
+  (case expect_LPAREN ts
+      of NONE => NONE
+       | SOME ts =>
+   (case parse_symbol_list ts
+     of NONE => NONE
+      | SOME (symbolList,ts) => 
+        (case expect_RPAREN ts
+    of NONE => NONE
+    | SOME ts =>
+    (case expect_EQUAL ts
+      of NONE => NONE
+      | SOME ts =>
+      (case parse_expr ts
+        of NONE => NONE
+        | SOME (es,ts) => SOME ((DeclDefinition (action,symbolList, es)), ts ) )))))))
+
+and parse_symbol_list ts =
+  (case expect_SYM ts 
+    of NONE => NONE
+    | SOME (s,ts) =>
+    (case expect_COMMA ts
+      of NONE => SOME ([s],ts)
+      | SOME ts =>
+      (case parse_symbol_list ts
+        of NONE => NONE 
+        | SOME (s1, ts) => SOME (s::s1,ts))))
+
 
 fun parse tokens = 
     (case parse_expr tokens
@@ -881,12 +937,10 @@ fun parse tokens =
        | _ => parseError "Cannot parse expression")
 
 
-
-datatype decl = DeclDefinition of string * (string list) * expr
-              | DeclExpression of expr
-
-
-fun parse_wdef tokens = unimplemented "parse_wdef"
+fun parse_wdef tokens = 
+  (case parse_decl tokens
+    of SOME (decl, ts) => decl
+    | _ => parseError "parse_wdef")
 
 
 
@@ -924,5 +978,35 @@ end
 
 
     
-fun shell_wdef fenv = unimplemented "shell_wdef"
+fun shell_wdef fenv = let
+      fun prompt () = (print "pldi-hw3> "; TextIO.inputLine (TextIO.stdIn))
+    fun pr l = print ((String.concatWith " " l)^"\n")
+    fun read fenv = 
+  (case prompt () 
+    of NONE => ()
+     | SOME ".\n" => ()
+     | SOME str => eval_print fenv str)
+    and eval_print fenv str = 
+    let val ts = lexString str in
+      (case parse_wdef ts 
+        of DeclExpression(expr) =>
+          (let val _ = pr (["Tokens ="] @ (map stringOfToken ts))
+            val _ = pr ["Internal rep = ", stringOfExpr (expr)]
+            val v = eval fenv expr
+            val _ = pr [stringOfValue v]
+          in
+            read fenv
+          end)
+        |DeclDefinition (funcName, param, expr ) =>
+          (let val _ = pr (["Tokens ="] @ (map stringOfToken ts))
+          in
+            read ((funcName, FDef(param,expr))::fenv) 
+          end ) )
+        end
+   handle Parsing msg => (pr ["Parsing error:", msg]; read fenv)
+        | Evaluation msg => (pr ["Evaluation error:", msg]; read fenv)
+in
+    print "Type . by itself to quit\n";
+    read fenv
+end
 
