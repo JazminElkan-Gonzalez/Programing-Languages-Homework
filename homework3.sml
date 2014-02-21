@@ -1,6 +1,11 @@
 (*
 Jazmin Gonzalez-Rivero
 Jazmin.Gonzalez-Rivero@students.olin.edu
+
+I got help with the last part of question 3 from Chris. I still don't really understand how the shell works 
+I might come bother you in the next couple of days about it. 
+
+I liked question 4. Once again it forced me to look at the big picture and understand what was going on.
 *)
 
 
@@ -55,6 +60,7 @@ datatype expr = EVal of value
               | ECall of string * expr list
 	      | EMatrix of expr list list
 	      | EEye of expr
+        | EIndex of expr * expr * expr
 
 
 datatype decl = DeclDefinition of string * (string list) * expr
@@ -108,6 +114,7 @@ fun stringOfExpr e = let
       | strE (EIdent n) = $ ["EIdent ", strS n]
       | strE (ECall (n,es)) = $ ["ECall (", strS n,", [", $+ (map strE es),"])"]
       | strE (EMatrix ess) = $ ["EMatrix ", strM strE ess]
+      | strE (EIndex (m,r,c)) = strCon "EIndex" strE [m,r,c]
 in
     strE e
 end
@@ -317,6 +324,7 @@ fun subst (EVal v) id e = EVal v
 	EMatrix (mapMat sub m)
     end
   | subst (EEye f) id e = EEye (subst f id e)
+  | subst (EIndex (m,r,c)) id e = EIndex (subst m id e, subst r id e, subst c id e)
 
 
 
@@ -343,6 +351,7 @@ fun eval _ (EVal v) = v
                 evalCall fenv (lookup name fenv) (map (eval fenv) es)
   | eval fenv (EMatrix m) = matrix (mapMat (eval fenv) m)
   | eval fenv (EEye (e)) = applyEye (eval fenv e)
+  | eval fenv (EIndex (m,r,c)) = applyGetEntry (eval fenv m) (eval fenv r) (eval fenv c)
 
 and evalCall fenv (FDef (params,body)) vs = let
     fun substParams e [] [] = e
@@ -414,6 +423,7 @@ datatype token = T_LET
 	       | T_RPAREN
 	       | T_COMMA
 	       | T_EYE
+         | T_INDEX
         | T_SEMICOLON
         | T_LBRACKET
         | T_RBRACKET
@@ -434,6 +444,7 @@ fun stringOfToken T_LET = "T_LET"
   | stringOfToken T_LPAREN = "T_LPAREN"
   | stringOfToken T_RPAREN = "T_RPAREN"
   | stringOfToken T_EYE = "T_EYE"
+  | stringOfToken T_INDEX = "T_INDEX"
   | stringOfToken T_DEF = "T_DEF"
   | stringOfToken T_SEMICOLON = "T_SEMICOLON"
   | stringOfToken T_LBRACKET = "T_LBRACKET"
@@ -448,6 +459,7 @@ fun produceSymbol "let" = SOME (T_LET)
   | produceSymbol "false" = SOME (T_FALSE)
   | produceSymbol "if" = SOME (T_IF)
   | produceSymbol "eye" = SOME (T_EYE)
+  | produceSymbol "index" = SOME (T_INDEX)
   | produceSymbol text = SOME (T_SYM text)
 
 fun produceInt text = SOME (T_INT (valOf (Int.fromString text)))
@@ -568,6 +580,9 @@ fun expect_FALSE (T_FALSE::ts) = SOME ts
 
 fun expect_EYE (T_EYE::ts) = SOME ts
   | expect_EYE _ = NONE
+
+fun expect_INDEX (T_INDEX::ts) = SOME ts
+  | expect_INDEX _ = NONE
 
 fun expect_SYM ((T_SYM s)::ts) = SOME (s,ts)
   | expect_SYM _ = NONE
@@ -809,6 +824,8 @@ and parse_factor ts =
 		of NONE => 
   (case parse_factor_EYE ts
     of NONE =>
+  (case parse_factor_INDEX ts
+    of NONE =>
 	(case parse_factor_CALL ts
 		of NONE => 
   (case parse_factor_MATRIX ts
@@ -818,6 +835,7 @@ and parse_factor ts =
 		| s => s)
 		| s => s)
 		| s => s)
+    | s => s)
     | s => s)
     | s => s)
     | s => s)
@@ -851,6 +869,32 @@ and parse_factor_EYE ts =
     (case expect_RPAREN ts
       of NONE => NONE
         | SOME ts => SOME (EEye (e) ,ts)))))
+
+and parse_factor_INDEX ts =
+  (case expect_INDEX ts 
+    of NONE => NONE
+    | SOME ts =>
+  (case parse_factor_MATRIX ts 
+      of NONE => NONE 
+      | SOME (matrix, ts) =>
+  (case expect_LBRACKET ts 
+        of NONE => NONE 
+        | SOME ts =>
+  (case parse_expr ts 
+          of NONE => NONE 
+          | SOME (row, ts) =>
+  (case expect_RBRACKET ts 
+            of NONE => NONE 
+            | SOME ts => 
+  (case expect_LBRACKET ts 
+        of NONE => NONE 
+        | SOME ts =>
+  (case parse_expr ts 
+          of NONE => NONE 
+          | SOME (col, ts) =>
+  (case expect_RBRACKET ts 
+            of NONE => NONE 
+            | SOME ts => SOME (EIndex (matrix, row, col) , ts)))))))))
 
 and parse_factor_MATRIX ts = 
     (case expect_LBRACKET ts
